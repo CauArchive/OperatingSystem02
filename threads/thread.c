@@ -23,20 +23,9 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 // 실행되야 하는 프로세스가 ready_list에 담긴다
-static struct list ready_list[4];
-static struct list *select_ready_list(struct thread* t);
-static struct list *select_ready_list(struct thread* t){
-  switch(t->qno){
-    case 0:
-      return &ready_list[0];
-    case 1:
-      return &ready_list[1];
-    case 2:
-      return &ready_list[2];
-    case 3:
-      return &ready_list[3]; 
-  }
-}
+static struct list ready_list;
+static struct list ready_list_2;
+#define which_ready_list(t) (((t)->qno) ? (&ready_list_2) : (&ready_list))
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -90,6 +79,22 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+/*
+Custom Function
+*/
+// struct list *select_ready_list(struct thread* t){
+//   switch(t->qno){
+//     case 0:
+//       return &ready_list[0];
+//     case 1:
+//       return &ready_list[1];
+//     case 2:
+//       return &ready_list[2];
+//     case 3:
+//       return &ready_list[3]; 
+//   }
+// }
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -109,8 +114,8 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  for(int i=0; i<4;i++)
-    list_init (&ready_list[i]);
+  list_init (&ready_list);
+  list_init (&ready_list_2);
   list_init (&all_list);
   list_init (&sleep_list);
   clock = 0;
@@ -159,9 +164,9 @@ thread_tick (void)
 
   /* Enforce preemption. */
 
-if (list_empty(&ready_list[0])) {
+  if (list_empty(&ready_list)) {
     struct list_elem* it, *itt;
-    for (it = list_begin(&ready_list[1]); it != list_end(&ready_list[1]); it = itt) {
+    for (it = list_begin(&ready_list_2); it != list_end(&ready_list_2); it = itt) {
       itt = list_next(it);
      struct thread * IT = list_entry(it, struct thread, elem);
      ++IT->total_time;
@@ -171,7 +176,7 @@ if (list_empty(&ready_list[0])) {
        if(IT->tid != 2)printf("%lld: thread %d goes to L1 queue from L2 queue\n", clock, IT->tid);
        #endif
        list_remove(it);
-       list_push_back(&ready_list[0], it);
+       list_push_back(&ready_list, it);
      }
     }
   }
@@ -316,13 +321,15 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back(select_ready_list(t), &t->elem);
+  list_push_back (which_ready_list(t), &t->elem);
   t->status = THREAD_READY;
+  
   intr_set_level (old_level);
   #ifdef TESTING
     if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from blocked state\n", clock, t->tid, t->qno + 1);
   #endif
 }
+
 
 static void
 update_next_tick_to_wakeup (int64_t tick)
@@ -451,11 +458,12 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (select_ready_list(cur), &cur->elem);
+    list_push_back (which_ready_list(cur), &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
 }
+
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
@@ -594,8 +602,6 @@ is_thread (struct thread *t)
 static void
 init_thread (struct thread *t, const char *name, int priority)
 {
-  enum intr_level old_level;
-
   ASSERT (t != NULL);
   ASSERT (PRI_HIGHEST <= priority && priority <= PRI_LOWEST);
   ASSERT (name != NULL);
@@ -606,12 +612,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  t->qno = 0;
+  t->qno = priority;
   t->total_time = 0;
-
-  old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
-  intr_set_level (old_level);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -635,13 +638,14 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list[0]))
+  if (list_empty (&ready_list) && list_empty(&ready_list_2))
     return idle_thread;
-  else if(list_empty(&ready_list[0])){
-    return list_entry(list_pop_front(&ready_list[1]), struct thread, elem);
+  else if (list_empty (&ready_list)){
+    return list_entry (list_pop_front (&ready_list_2), struct thread, elem);
   }
-  else
-    return list_entry (list_pop_front (&ready_list[0]), struct thread, elem);
+  else {
+    return list_entry (list_pop_front (&ready_list), struct thread, elem);  
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -700,19 +704,20 @@ thread_schedule_tail (struct thread *prev)
 static void
 schedule (void) 
 {
-  struct thread *cur = running_thread ();
-  struct thread *next = next_thread_to_run ();
-  struct thread *prev = NULL;
+struct thread *cur = running_thread ();
+  enum thread_status stat = cur->status;
   int id = cur->tid;
+  struct thread *next = next_thread_to_run ();
   int tid = next->tid, qno = next->qno;
+  struct thread *prev = NULL;
 
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
-
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
+
   #ifdef TESTING
   if (stat == THREAD_BLOCKED)
     if(id != 2)printf("%lld: thread %d goes to blocked state from running state\n", clock, id);
