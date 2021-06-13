@@ -25,7 +25,7 @@
 // 실행되야 하는 프로세스가 ready_list에 담긴다
 static struct list ready_list;
 static struct list ready_list_2;
-#define which_ready_list(t) (((t)->qno) ? (&ready_list_2) : (&ready_list))
+#define which_ready_list(t) (((t)->priority) ? (&ready_list_2) : (&ready_list))
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -83,7 +83,7 @@ static tid_t allocate_tid (void);
 Custom Function
 */
 // struct list *select_ready_list(struct thread* t){
-//   switch(t->qno){
+//   switch(t->priority){
 //     case 0:
 //       return &ready_list[0];
 //     case 1:
@@ -171,7 +171,7 @@ thread_tick (void)
      struct thread * IT = list_entry(it, struct thread, elem);
      ++IT->total_time;
      if (IT->total_time >= 6*TIME_SLICE) {
-       IT->qno = IT->total_time = 0;
+       IT->priority = IT->total_time = 0;
        #ifdef TESTING
        if(IT->tid != 2)printf("%lld: thread %d goes to L1 queue from L2 queue\n", clock, IT->tid);
        #endif
@@ -184,21 +184,21 @@ thread_tick (void)
   ++thread_ticks;
   if (thread_ticks == 1) 
     #ifdef TESTING
-    if(t->tid!=2)printf("%lld: thread %d goes to running state from L%d queue\n", clock-1, t->tid,t->qno+1);
+    if(t->tid!=2)printf("%lld: thread %d goes to running state from L%d queue\n", clock-1, t->tid,t->priority+1);
     #endif
-  if (t->qno == 0) {
+  if (t->priority == 0) {
     ++t->total_time;
     if (t->total_time >= 2*TIME_SLICE) {
      t->total_time = 0;
-     t->qno = 1;
+     t->priority = 1;
      #ifdef TESTING
-     if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->qno + 1);
+     if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->priority + 1);
      #endif
      intr_yield_on_return ();
     }
     else if (thread_ticks >= TIME_SLICE) {
       #ifdef TESTING
-      if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->qno + 1);
+      if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->priority + 1);
       #endif
         intr_yield_on_return ();
       }
@@ -207,7 +207,7 @@ thread_tick (void)
     if (thread_ticks >= 2*TIME_SLICE) {
         t->total_time = 0;
         #ifdef TESTING
-        if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->qno + 1);
+        if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->priority + 1);
         #endif
         intr_yield_on_return ();
       }
@@ -326,7 +326,7 @@ thread_unblock (struct thread *t)
   
   intr_set_level (old_level);
   #ifdef TESTING
-    if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from blocked state\n", clock, t->tid, t->qno + 1);
+    if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from blocked state\n", clock, t->tid, t->priority + 1);
   #endif
 }
 
@@ -612,7 +612,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  t->qno = priority;
   t->total_time = 0;
   list_push_back (&all_list, &t->allelem);
 }
@@ -708,7 +707,7 @@ struct thread *cur = running_thread ();
   enum thread_status stat = cur->status;
   int id = cur->tid;
   struct thread *next = next_thread_to_run ();
-  int tid = next->tid, qno = next->qno;
+  int tid = next->tid, priority = next->priority;
   struct thread *prev = NULL;
 
   ASSERT (intr_get_level () == INTR_OFF);

@@ -16,7 +16,7 @@
 void test_loop(void *aux)
 {
     int i;
-    for(i=0; i<10000; i++) {
+    for(i=0; i<100; i++) {
         struct thread *t = thread_current ();
         printf("%s: loop %d\n", t->name, i);
     }

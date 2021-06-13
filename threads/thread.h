@@ -103,7 +103,6 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-    int qno;
     int total_time;
   };
 
