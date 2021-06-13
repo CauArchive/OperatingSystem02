@@ -24,6 +24,19 @@
    that are ready to run but not actually running. */
 // 실행되야 하는 프로세스가 ready_list에 담긴다
 static struct list ready_list[4];
+static struct list *select_ready_list(struct thread* t);
+static struct list *select_ready_list(struct thread* t){
+  switch(t->qno){
+    case 0:
+      return &ready_list[0];
+    case 1:
+      return &ready_list[1];
+    case 2:
+      return &ready_list[2];
+    case 3:
+      return &ready_list[3]; 
+  }
+}
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -54,6 +67,7 @@ struct kernel_thread_frame
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
+static long long clock;
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -75,12 +89,6 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-
-
-/*
-  Custom Functions are declared here
-*/
-//
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -105,6 +113,7 @@ thread_init (void)
     list_init (&ready_list[i]);
   list_init (&all_list);
   list_init (&sleep_list);
+  clock = 0;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -135,6 +144,7 @@ thread_start (void)
 void
 thread_tick (void) 
 {
+  ++clock;
   struct thread *t = thread_current ();
 
   /* Update statistics. */
@@ -148,8 +158,55 @@ thread_tick (void)
     kernel_ticks++;
 
   /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
-    intr_yield_on_return ();
+
+if (list_empty(&ready_list[0])) {
+    struct list_elem* it, *itt;
+    for (it = list_begin(&ready_list[1]); it != list_end(&ready_list[1]); it = itt) {
+      itt = list_next(it);
+     struct thread * IT = list_entry(it, struct thread, elem);
+     ++IT->total_time;
+     if (IT->total_time >= 6*TIME_SLICE) {
+       IT->qno = IT->total_time = 0;
+       #ifdef TESTING
+       if(IT->tid != 2)printf("%lld: thread %d goes to L1 queue from L2 queue\n", clock, IT->tid);
+       #endif
+       list_remove(it);
+       list_push_back(&ready_list[0], it);
+     }
+    }
+  }
+
+  ++thread_ticks;
+  if (thread_ticks == 1) 
+    #ifdef TESTING
+    if(t->tid!=2)printf("%lld: thread %d goes to running state from L%d queue\n", clock-1, t->tid,t->qno+1);
+    #endif
+  if (t->qno == 0) {
+    ++t->total_time;
+    if (t->total_time >= 2*TIME_SLICE) {
+     t->total_time = 0;
+     t->qno = 1;
+     #ifdef TESTING
+     if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->qno + 1);
+     #endif
+     intr_yield_on_return ();
+    }
+    else if (thread_ticks >= TIME_SLICE) {
+      #ifdef TESTING
+      if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->qno + 1);
+      #endif
+        intr_yield_on_return ();
+      }
+  }
+  else {
+    if (thread_ticks >= 2*TIME_SLICE) {
+        t->total_time = 0;
+        #ifdef TESTING
+        if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->qno + 1);
+        #endif
+        intr_yield_on_return ();
+      }
+  }
 }
 
 /* Prints thread statistics. */
@@ -184,6 +241,7 @@ thread_create (const char *name, int priority,
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
   tid_t tid;
+  enum intr_level old_level;
 
   ASSERT (function != NULL);
 
@@ -195,6 +253,12 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  
+  #ifdef TESTING
+  if(t->tid != 2)printf("%lld: thread %d created and is in blocked state\n", clock, t->tid);
+  #endif
+
+  old_level = intr_disable ();
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -210,6 +274,8 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
+
+  intr_set_level (old_level);
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -250,10 +316,12 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  // list_push_back(&ready_list[t->priority], &t->elem);
-  list_push_back(&ready_list[0], &t->elem);
+  list_push_back(select_ready_list(t), &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+  #ifdef TESTING
+    if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from blocked state\n", clock, t->tid, t->qno + 1);
+  #endif
 }
 
 static void
@@ -360,6 +428,10 @@ thread_exit (void)
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
+    int tid = thread_current()->tid;
+  #ifndef TESTING
+  if(tid != 2)printf("%lld: thread %d finished\n", clock, tid);
+  #endif
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
@@ -379,7 +451,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list[0], &cur->elem);
+    list_push_back (select_ready_list(cur), &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -534,6 +606,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  t->qno = 0;
+  t->total_time = 0;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -563,6 +637,9 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list[0]))
     return idle_thread;
+  else if(list_empty(&ready_list[0])){
+    return list_entry(list_pop_front(&ready_list[1]), struct thread, elem);
+  }
   else
     return list_entry (list_pop_front (&ready_list[0]), struct thread, elem);
 }
@@ -626,6 +703,8 @@ schedule (void)
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
+  int id = cur->tid;
+  int tid = next->tid, qno = next->qno;
 
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
@@ -634,6 +713,10 @@ schedule (void)
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
+  #ifdef TESTING
+  if (stat == THREAD_BLOCKED)
+    if(id != 2)printf("%lld: thread %d goes to blocked state from running state\n", clock, id);
+  #endif
 }
 
 /* Returns a tid to use for a new thread. */
