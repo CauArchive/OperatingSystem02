@@ -22,7 +22,15 @@
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
-static struct list ready_list;
+// 실행되야 하는 프로세스가 ready_list에 담긴다
+// Feedback Queue 0 의 역할을 한다
+static struct list ready_list_0;
+// Feedback Queue 1
+static struct list ready_list_1;
+// Feedback Queue 2
+static struct list ready_list_2;
+// Feedback Queue 3
+static struct list ready_list_3;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -75,6 +83,14 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+
+/*
+  Custom Functions are declared here
+*/
+bool thread_compare_priority(const struct list_elem *first, const struct list_elem *second, void *aux UNUSED){
+  return list_entry(first,struct thread, elem)->priority > list_entry(second,struct thread, elem)->priority;
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -94,7 +110,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  list_init (&ready_list);
+  list_init (&ready_list_0);
   list_init (&all_list);
   list_init (&sleep_list);
 
@@ -242,7 +258,18 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  // switch(t->priority){
+  //   case 0:
+  //     list_push_back(&ready)
+  //     break;
+  //   case 1:
+  //     break;
+  //   case 2:
+  //     break;
+  //   case 3:
+  //     break;
+  // }
+  list_push_back (&ready_list_0, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -370,7 +397,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_push_back (&ready_list_0, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -552,10 +579,10 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
+  if (list_empty (&ready_list_0))
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    return list_entry (list_pop_front (&ready_list_0), struct thread, elem);
 }
 
 /* Completes a thread switch by activating the new thread's page

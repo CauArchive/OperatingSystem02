@@ -18,7 +18,7 @@ void test_loop(void *aux)
     int i;
     for(i=0; i<100; i++) {
         struct thread *t = thread_current ();
-        printf("%s: loop %d\n", t->name, i);
+        //printf("%s: loop %d\n", t->name, i);
     }
 }
 
@@ -26,6 +26,8 @@ void run_mfqtest(char **argv)
 {   
     int cnt;
 	char *token, *save_ptr;
+    char* name;
+    int priority;
 
     enum intr_level old_level;
     old_level = intr_disable ();
@@ -38,11 +40,13 @@ void run_mfqtest(char **argv)
         char *subtoken, *save_ptr2;
         subtoken = strtok_r (token, ".", &save_ptr2);
         printf("thread name: %s\n", &subtoken[1]);
+        name = &subtoken[1];
         subtoken = strtok_r (NULL, ".", &save_ptr2);
+        priority = atoi(subtoken);
         printf("priority: %d\n", atoi(subtoken));
 
         // you can create threads here 
-        //thread_create(name, priority, test_loop, NULL);
+        thread_create(name, priority, test_loop, NULL);
 
 		cnt++;
 	}
