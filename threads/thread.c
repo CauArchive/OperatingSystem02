@@ -569,7 +569,7 @@ static struct thread *
 next_thread_to_run (void) 
 {
   struct thread* next;
-  struct thread* aging;
+  struct thread* will_age;
   struct list_elem* e;
   for(int i=0;i<4;i++){
     // ready_list중 남아있는 큐 체크(우선순위에 따라서)
@@ -583,16 +583,16 @@ next_thread_to_run (void)
         e = list_front(&ready_list[j]);
         // 해당 큐의 모든 element순회하면서 age추가
         for(;e != NULL;e = e->next){
-          aging = list_entry (e, struct thread, elem);
+          will_age = list_entry (e, struct thread, elem);
           // aging해줄 스레드가 스레드가 아닐경우 break
           // 만약 스레드의 상태가 BLOCKED일 경우 aging 취소
-          if(!is_thread(aging)) break;
-          if(aging->status == THREAD_BLOCKED) break;
+          if(!is_thread(will_age)) break;
+          if(will_age->status == THREAD_BLOCKED) break;
           //age를 올리고 20이 넘었으면 프로모션을 해준다
-          aging->age++;
-          if(aging->age >= 20){
-            aging->priority++;
-            aging->age = 0;
+          will_age->age++;
+          if(will_age->age >= 20){
+            will_age->priority++;
+            will_age->age = 0;
           }
         }
       }
