@@ -171,9 +171,6 @@ thread_tick (void)
      ++IT->total_time;
      if (IT->total_time >= 6*TIME_SLICE) {
        IT->priority = IT->total_time = 0;
-       #ifdef TESTING
-       if(IT->tid != 2)printf("%lld: thread %d goes to L1 queue from L2 queue\n", clock, IT->tid);
-       #endif
        list_remove(it);
        list_push_back(&ready_list[0], it);
      }
@@ -182,32 +179,20 @@ thread_tick (void)
 
   ++thread_ticks;
   if (thread_ticks == 1) 
-    #ifdef TESTING
-    if(t->tid!=2)printf("%lld: thread %d goes to running state from L%d queue\n", clock-1, t->tid,t->priority+1);
-    #endif
   if (t->priority == 0) {
     ++t->total_time;
     if (t->total_time >= 2*TIME_SLICE) {
      t->total_time = 0;
      t->priority = 1;
-     #ifdef TESTING
-     if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->priority + 1);
-     #endif
      intr_yield_on_return ();
     }
     else if (thread_ticks >= TIME_SLICE) {
-      #ifdef TESTING
-      if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->priority + 1);
-      #endif
         intr_yield_on_return ();
       }
   }
   else {
     if (thread_ticks >= 2*TIME_SLICE) {
         t->total_time = 0;
-        #ifdef TESTING
-        if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from running state\n", clock, t->tid, t->priority + 1);
-        #endif
         intr_yield_on_return ();
       }
   }
@@ -257,10 +242,6 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-  
-  #ifdef TESTING
-  if(t->tid != 2)printf("%lld: thread %d created and is in blocked state\n", clock, t->tid);
-  #endif
 
   old_level = intr_disable ();
 
@@ -324,9 +305,6 @@ thread_unblock (struct thread *t)
   t->status = THREAD_READY;
   
   intr_set_level (old_level);
-  #ifdef TESTING
-    if(t->tid != 2)printf("%lld: thread %d goes to L%d queue from blocked state\n", clock, t->tid, t->priority + 1);
-  #endif
 }
 
 
@@ -435,9 +413,6 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
     int tid = thread_current()->tid;
-  #ifndef TESTING
-  if(tid != 2)printf("%lld: thread %d finished\n", clock, tid);
-  #endif
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
@@ -702,11 +677,8 @@ thread_schedule_tail (struct thread *prev)
 static void
 schedule (void) 
 {
-struct thread *cur = running_thread ();
-  enum thread_status stat = cur->status;
-  int id = cur->tid;
+  struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run ();
-  int tid = next->tid, priority = next->priority;
   struct thread *prev = NULL;
 
   ASSERT (intr_get_level () == INTR_OFF);
@@ -715,11 +687,6 @@ struct thread *cur = running_thread ();
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
-
-  #ifdef TESTING
-  if (stat == THREAD_BLOCKED)
-    if(id != 2)printf("%lld: thread %d goes to blocked state from running state\n", clock, id);
-  #endif
 }
 
 /* Returns a tid to use for a new thread. */
