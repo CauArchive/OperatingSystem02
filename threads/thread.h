@@ -21,7 +21,7 @@ typedef int tid_t;
 
 /* Thread priorities. */
 #define PRI_HIGHEST 0                       /* Highest priority. */
-#define PRI_DEFAULT 0                  /* Default priority. */
+#define PRI_DEFAULT 1                  /* Default priority. */
 #define PRI_LOWEST 3                      /* Lowest priority. */
 
 /* A kernel thread or user process.
@@ -103,6 +103,7 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+    // age variable to prevent starvation
     int age;
   };
 

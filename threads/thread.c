@@ -54,7 +54,6 @@ struct kernel_thread_frame
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
-static long long clock;
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -101,7 +100,6 @@ thread_init (void)
   }
   list_init (&all_list);
   list_init (&sleep_list);
-  clock = 0;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -358,7 +356,6 @@ thread_exit (void)
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
-    int tid = thread_current()->tid;
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
@@ -565,18 +562,16 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  int i = 0;
   struct thread* next_thread;
   struct thread* aging_thread;
   struct list_elem* element;
-  for(i=4;i>=0;i--){
-    //list empty check 4->0
+  for(int i=0;i<4;i++){
+    //list empty check 0->3
     if(!list_empty(&(ready_list[i]))){
-      int j;
       //get thread which will run on next tick
       next_thread = list_entry (list_pop_front (&(ready_list[i])), struct thread, elem);
       //aging all thread in ready_list[i-1 -> 0]
-      for(j = i - 1;j>=0;j--){
+      for(int j = i - 1;j>=0;j--){
         if(list_empty(&(ready_list[j]))) continue;
         element = list_front(&ready_list[j]);
         for(;element != NULL;element = element->next){
