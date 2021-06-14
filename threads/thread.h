@@ -105,6 +105,7 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
     // age variable to prevent starvation
     int age;
+    long long total_time;
   };
 
 void thread_init (void);

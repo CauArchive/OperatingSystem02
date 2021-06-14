@@ -23,7 +23,6 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 // 실행되야 하는 프로세스가 ready_list에 담긴다
-// ready_list 0,1,2,3은 실제 실행을 위한 큐
 static struct list ready_list[4];
 
 /* List of all processes.  Processes are added to this list
@@ -96,6 +95,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+  // FQ들을 초기화
   for(int i=0;i<4;i++){
     list_init(&ready_list[i]);
   }
@@ -132,7 +132,8 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-
+  // 스레드의 총 실행 틱을 계산
+  t->total_time++;
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -357,8 +358,8 @@ thread_exit (void)
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
-  int tid = thread_current()->tid;
-  if(tid != 2)printf("thread %d finished\n", tid);
+  struct thread *t = thread_current ();
+  if(t->tid != 2)printf("thread %s finished in %lld ticks\n", t->name, t->total_time);
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
@@ -539,6 +540,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   t->age = 0;
+  t->total_time = 0;
 
   old_level = intr_disable();
   list_push_back (&all_list, &t->allelem);
