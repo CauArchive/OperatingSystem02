@@ -379,7 +379,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread){
-    // after thread_ticks >= TIME_SLICE(value 4) need to lower priority
+    // 스레드의 틱이 TIME_SLICE(4로 설정)보다 작기때문에 thread_yield가 실행됨
+    // 따라서 가장 낮은 priority가 아닐경우 priority를 1씩 올려서 우선순위를 낮춘다
     if(cur->priority!=3)
       cur->priority++;
     list_push_back(&ready_list[cur->priority], &cur->elem);
@@ -539,7 +540,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  // aging에 쓸 변수 초기화
   t->age = 0;
+  // 스레드의 총 실행 tick 변수 초기화
   t->total_time = 0;
 
   old_level = intr_disable();
