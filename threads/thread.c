@@ -23,9 +23,7 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 // 실행되야 하는 프로세스가 ready_list에 담긴다
-static struct list ready_list;
-static struct list ready_list_2;
-#define which_ready_list(t) (((t)->priority) ? (&ready_list_2) : (&ready_list))
+static struct list ready_list[4];
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -82,18 +80,18 @@ static tid_t allocate_tid (void);
 /*
 Custom Function
 */
-// struct list *select_ready_list(struct thread* t){
-//   switch(t->priority){
-//     case 0:
-//       return &ready_list[0];
-//     case 1:
-//       return &ready_list[1];
-//     case 2:
-//       return &ready_list[2];
-//     case 3:
-//       return &ready_list[3]; 
-//   }
-// }
+struct list *select_ready_list(struct thread* t){
+  switch(t->priority){
+    case 0:
+      return &ready_list[0];
+    case 1:
+      return &ready_list[1];
+    case 2:
+      return &ready_list[2];
+    case 3:
+      return &ready_list[3]; 
+  }
+}
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -114,8 +112,9 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  list_init (&ready_list);
-  list_init (&ready_list_2);
+  for(int i=0;i<4;i++){
+    list_init(&ready_list[i]);
+  }
   list_init (&all_list);
   list_init (&sleep_list);
   clock = 0;
@@ -164,9 +163,9 @@ thread_tick (void)
 
   /* Enforce preemption. */
 
-  if (list_empty(&ready_list)) {
+  if (list_empty(&ready_list[0])) {
     struct list_elem* it, *itt;
-    for (it = list_begin(&ready_list_2); it != list_end(&ready_list_2); it = itt) {
+    for (it = list_begin(&ready_list[1]); it != list_end(&ready_list[1]); it = itt) {
       itt = list_next(it);
      struct thread * IT = list_entry(it, struct thread, elem);
      ++IT->total_time;
@@ -176,7 +175,7 @@ thread_tick (void)
        if(IT->tid != 2)printf("%lld: thread %d goes to L1 queue from L2 queue\n", clock, IT->tid);
        #endif
        list_remove(it);
-       list_push_back(&ready_list, it);
+       list_push_back(&ready_list[0], it);
      }
     }
   }
@@ -321,7 +320,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (which_ready_list(t), &t->elem);
+  list_push_back (&ready_list[t->priority], &t->elem);
   t->status = THREAD_READY;
   
   intr_set_level (old_level);
@@ -637,13 +636,13 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list) && list_empty(&ready_list_2))
+  if (list_empty (&ready_list[0]) && list_empty(&ready_list[1]))
     return idle_thread;
-  else if (list_empty (&ready_list)){
-    return list_entry (list_pop_front (&ready_list_2), struct thread, elem);
+  else if (list_empty (&ready_list[0])){
+    return list_entry (list_pop_front (&ready_list[1]), struct thread, elem);
   }
   else {
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);  
+    return list_entry (list_pop_front (&ready_list[0]), struct thread, elem);  
   }
 }
 

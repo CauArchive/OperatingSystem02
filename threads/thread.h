@@ -106,7 +106,7 @@ struct thread
     int total_time;
   };
 
-// struct list *select_ready_list(struct thread* t);
+struct list *select_ready_list(struct thread* t);
 
 
 void thread_init (void);
