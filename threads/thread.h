@@ -103,11 +103,8 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-    int total_time;
+    int age;
   };
-
-struct list *select_ready_list(struct thread* t);
-
 
 void thread_init (void);
 void thread_start (void);

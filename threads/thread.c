@@ -77,22 +77,6 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
-/*
-Custom Function
-*/
-struct list *select_ready_list(struct thread* t){
-  switch(t->priority){
-    case 0:
-      return &ready_list[0];
-    case 1:
-      return &ready_list[1];
-    case 2:
-      return &ready_list[2];
-    case 3:
-      return &ready_list[3]; 
-  }
-}
-
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -148,7 +132,6 @@ thread_start (void)
 void
 thread_tick (void) 
 {
-  ++clock;
   struct thread *t = thread_current ();
 
   /* Update statistics. */
@@ -162,40 +145,8 @@ thread_tick (void)
     kernel_ticks++;
 
   /* Enforce preemption. */
-
-  if (list_empty(&ready_list[0])) {
-    struct list_elem* it, *itt;
-    for (it = list_begin(&ready_list[1]); it != list_end(&ready_list[1]); it = itt) {
-      itt = list_next(it);
-     struct thread * IT = list_entry(it, struct thread, elem);
-     ++IT->total_time;
-     if (IT->total_time >= 6*TIME_SLICE) {
-       IT->priority = IT->total_time = 0;
-       list_remove(it);
-       list_push_back(&ready_list[0], it);
-     }
-    }
-  }
-
-  ++thread_ticks;
-  if (thread_ticks == 1) 
-  if (t->priority == 0) {
-    ++t->total_time;
-    if (t->total_time >= 2*TIME_SLICE) {
-     t->total_time = 0;
-     t->priority = 1;
-     intr_yield_on_return ();
-    }
-    else if (thread_ticks >= TIME_SLICE) {
-        intr_yield_on_return ();
-      }
-  }
-  else {
-    if (thread_ticks >= 2*TIME_SLICE) {
-        t->total_time = 0;
-        intr_yield_on_return ();
-      }
-  }
+  if (++thread_ticks >= TIME_SLICE)
+    intr_yield_on_return ();
 }
 
 /* Prints thread statistics. */
@@ -230,7 +181,6 @@ thread_create (const char *name, int priority,
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
   tid_t tid;
-  enum intr_level old_level;
 
   ASSERT (function != NULL);
 
@@ -242,8 +192,6 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-
-  old_level = intr_disable ();
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -259,8 +207,6 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
-
-  intr_set_level (old_level);
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -303,7 +249,7 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list[t->priority], &t->elem);
   t->status = THREAD_READY;
-  
+
   intr_set_level (old_level);
 }
 
@@ -431,8 +377,11 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (which_ready_list(cur), &cur->elem);
+  if (cur != idle_thread){
+    // after thread_ticks >= TIME_SLICE(value 4) need to lower priority
+    cur->priority -= cur->priority == 0? 0 : 1;
+    list_push_back(&ready_list[cur->priority], &cur->elem);
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -576,6 +525,8 @@ is_thread (struct thread *t)
 static void
 init_thread (struct thread *t, const char *name, int priority)
 {
+  enum intr_level old_level;
+
   ASSERT (t != NULL);
   ASSERT (PRI_HIGHEST <= priority && priority <= PRI_LOWEST);
   ASSERT (name != NULL);
@@ -586,8 +537,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  t->total_time = 0;
+  t->age = 0;
+
+  old_level = intr_disable();
   list_push_back (&all_list, &t->allelem);
+  intr_set_level(old_level);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -611,14 +565,35 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list[0]) && list_empty(&ready_list[1]))
-    return idle_thread;
-  else if (list_empty (&ready_list[0])){
-    return list_entry (list_pop_front (&ready_list[1]), struct thread, elem);
+  int i = 0;
+  struct thread* next_thread;
+  struct thread* aging_thread;
+  struct list_elem* element;
+  for(i=4;i>=0;i--){
+    //list empty check 4->0
+    if(!list_empty(&(ready_list[i]))){
+      int j;
+      //get thread which will run on next tick
+      next_thread = list_entry (list_pop_front (&(ready_list[i])), struct thread, elem);
+      //aging all thread in ready_list[i-1 -> 0]
+      for(j = i - 1;j>=0;j--){
+        if(list_empty(&(ready_list[j]))) continue;
+        element = list_front(&ready_list[j]);
+        for(;element != NULL;element = element->next){
+          aging_thread = list_entry (element, struct thread, elem);
+          if(!is_thread(aging_thread)) break;
+          //aging
+          aging_thread->age++;
+          if(aging_thread->age >= 20){
+            aging_thread->priority++;
+            aging_thread->age = 0;
+          }
+        }
+      }
+      return next_thread;
+    }
   }
-  else {
-    return list_entry (list_pop_front (&ready_list[0]), struct thread, elem);  
-  }
+  return idle_thread;
 }
 
 /* Completes a thread switch by activating the new thread's page
