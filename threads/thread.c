@@ -23,6 +23,7 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 // 실행되야 하는 프로세스가 ready_list에 담긴다
+// ready_list 0,1,2,3은 실제 실행을 위한 큐
 static struct list ready_list[4];
 
 /* List of all processes.  Processes are added to this list
@@ -356,6 +357,8 @@ thread_exit (void)
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
+  int tid = thread_current()->tid;
+  if(tid != 2)printf("thread %d finished\n", tid);
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
@@ -376,7 +379,8 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread){
     // after thread_ticks >= TIME_SLICE(value 4) need to lower priority
-    cur->priority -= cur->priority == 0? 0 : 1;
+    if(cur->priority!=3)
+      cur->priority++;
     list_push_back(&ready_list[cur->priority], &cur->elem);
   }
   cur->status = THREAD_READY;
@@ -562,30 +566,35 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  struct thread* next_thread;
-  struct thread* aging_thread;
-  struct list_elem* element;
+  struct thread* next;
+  struct thread* aging;
+  struct list_elem* e;
   for(int i=0;i<4;i++){
-    //list empty check 0->3
-    if(!list_empty(&(ready_list[i]))){
-      //get thread which will run on next tick
-      next_thread = list_entry (list_pop_front (&(ready_list[i])), struct thread, elem);
-      //aging all thread in ready_list[i-1 -> 0]
-      for(int j = i - 1;j>=0;j--){
-        if(list_empty(&(ready_list[j]))) continue;
-        element = list_front(&ready_list[j]);
-        for(;element != NULL;element = element->next){
-          aging_thread = list_entry (element, struct thread, elem);
-          if(!is_thread(aging_thread)) break;
-          //aging
-          aging_thread->age++;
-          if(aging_thread->age >= 20){
-            aging_thread->priority++;
-            aging_thread->age = 0;
+    // ready_list중 남아있는 큐 체크(우선순위에 따라서)
+    if(!list_empty(&ready_list[i])){
+      // 다음에 실행할 스레드에 대한 정보 가져오기
+      next = list_entry (list_pop_front (&ready_list[i]), struct thread, elem);
+      // 현재 실행중인 큐(ready_list[i]보다 우선순위가 낮은 큐에 있는 스레드들의 age를 올려줘야한다)
+      for(int j = i + 1;j<4;j++){
+        // 큐가 비어 있으면 건너뛰기
+        if(list_empty(&ready_list[j])) continue;
+        e = list_front(&ready_list[j]);
+        // 해당 큐의 모든 element순회하면서 age추가
+        for(;e != NULL;e = e->next){
+          aging = list_entry (e, struct thread, elem);
+          // aging해줄 스레드가 스레드가 아닐경우 break
+          // 만약 스레드의 상태가 BLOCKED일 경우 aging 취소
+          if(!is_thread(aging)) break;
+          if(aging->status == THREAD_BLOCKED) break;
+          //age를 올리고 20이 넘었으면 프로모션을 해준다
+          aging->age++;
+          if(aging->age >= 20){
+            aging->priority++;
+            aging->age = 0;
           }
         }
       }
-      return next_thread;
+      return next;
     }
   }
   return idle_thread;
