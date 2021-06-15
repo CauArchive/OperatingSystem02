@@ -144,8 +144,16 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  // 각 스레드들의 우선순위에 따라서 실행 시간을 보장해야한다
   /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
+  thread_ticks++;
+  if (thread_ticks >= TIME_SLICE && t->priority == 0)
+    intr_yield_on_return ();
+  else if(thread_ticks >= TIME_SLICE+1 && t->priority == 1)
+    intr_yield_on_return ();
+  else if(thread_ticks >= TIME_SLICE+2 && t->priority == 2)
+    intr_yield_on_return ();
+  else if(thread_ticks >= TIME_SLICE+3 && t->priority == 3)
     intr_yield_on_return ();
 }
 

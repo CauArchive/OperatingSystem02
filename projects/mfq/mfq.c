@@ -18,7 +18,7 @@ void test_loop(void *aux)
     int i;
     for(i=0; i<10000000; i++) {
         struct thread *t = thread_current ();
-        if(i%1000000==0)
+        if(i%2000000==0)
             printf("%s: loop %d priority %d age %d\n", t->name, i,t->priority, t->age);
     }
 }
