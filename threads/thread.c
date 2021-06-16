@@ -132,6 +132,8 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
+  struct thread* will_age;
+  struct list_elem* e;
   // 스레드의 총 실행 틱을 계산
   t->total_time++;
   /* Update statistics. */
@@ -144,16 +146,37 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  // 현재 실행중인 큐보다 우선순위가 낮은 큐에 있는 스레드들의 age를 올려줘야한다)
+  for(int i = t->priority + 1;i<4;i++){
+    // 큐가 비어 있으면 건너뛰기
+    if(list_empty(&ready_list[i])) continue;
+    for (e = list_begin (&ready_list[i]); e != list_end (&ready_list[i]);e=e->next){
+      // 해당 큐의 모든 element순회하면서 age추가
+      will_age = list_entry(e, struct thread, elem);
+      // aging해줄 스레드가 스레드가 아닐경우 break
+      // 만약 스레드의 상태가 BLOCKED일 경우 aging 취소
+      if(!is_thread(will_age)) break;
+      if(will_age->status == THREAD_BLOCKED) break;
+      //age를 올리고 20이 넘었으면 프로모션을 해준다
+      will_age->age++;
+      if(will_age->age >= 20){
+        if(will_age->priority!=0)
+          will_age->priority--;
+        will_age->age = 0;
+      }
+    }
+  }
+
   // 각 스레드들의 우선순위에 따라서 실행 시간을 보장해야한다
   /* Enforce preemption. */
   thread_ticks++;
-  if (thread_ticks >= TIME_SLICE && t->priority == 0)
+  if((thread_ticks >= TIME_SLICE) && t->priority == 0)
     intr_yield_on_return ();
-  else if(thread_ticks >= TIME_SLICE+1 && t->priority == 1)
+  if((thread_ticks >= TIME_SLICE+1) && t->priority == 1)
     intr_yield_on_return ();
-  else if(thread_ticks >= TIME_SLICE+2 && t->priority == 2)
+  if((thread_ticks >= TIME_SLICE+2) && t->priority == 2)
     intr_yield_on_return ();
-  else if(thread_ticks >= TIME_SLICE+3 && t->priority == 3)
+  if((thread_ticks >= TIME_SLICE+3) && t->priority == 3)
     intr_yield_on_return ();
 }
 
@@ -580,33 +603,11 @@ static struct thread *
 next_thread_to_run (void) 
 {
   struct thread* next;
-  struct thread* will_age;
-  struct list_elem* e;
   for(int i=0;i<4;i++){
     // ready_list중 남아있는 큐 체크(우선순위에 따라서)
     if(!list_empty(&ready_list[i])){
       // 다음에 실행할 스레드에 대한 정보 가져오기
       next = list_entry (list_pop_front (&ready_list[i]), struct thread, elem);
-      // 현재 실행중인 큐(ready_list[i]보다 우선순위가 낮은 큐에 있는 스레드들의 age를 올려줘야한다)
-      for(int j = i + 1;j<4;j++){
-        // 큐가 비어 있으면 건너뛰기
-        if(list_empty(&ready_list[j])) continue;
-        e = list_front(&ready_list[j]);
-        // 해당 큐의 모든 element순회하면서 age추가
-        for(;e != NULL;e = e->next){
-          will_age = list_entry (e, struct thread, elem);
-          // aging해줄 스레드가 스레드가 아닐경우 break
-          // 만약 스레드의 상태가 BLOCKED일 경우 aging 취소
-          if(!is_thread(will_age)) break;
-          if(will_age->status == THREAD_BLOCKED) break;
-          //age를 올리고 20이 넘었으면 프로모션을 해준다
-          will_age->age++;
-          if(will_age->age >= 20){
-            will_age->priority++;
-            will_age->age = 0;
-          }
-        }
-      }
       return next;
     }
   }
